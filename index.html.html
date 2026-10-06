@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeoCore Computer Lab — Simulador</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#eef4f8;color:#17232d}
+header{background:#125a8a;color:white;padding:18px 28px}
+header h1{margin:0 0 5px;font-size:25px}
+header p{margin:0;opacity:.9}
+main{max-width:1400px;margin:20px auto;padding:0 18px}
+.controls{background:white;border-radius:12px;padding:15px;box-shadow:0 2px 8px #0002;margin-bottom:16px}
+button{border:0;border-radius:8px;padding:10px 16px;margin:4px;background:#125a8a;color:white;cursor:pointer;font-weight:bold}
+button:hover{background:#0d466b}
+button.secondary{background:#5d7180}
+button.warning{background:#b96b19}
+.status{font-weight:bold;padding:8px 12px;border-radius:8px;background:#e9f3f8;display:inline-block;margin-left:8px}
+.grid{display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:15px;align-items:stretch}
+.panel{background:white;border-radius:12px;padding:15px;box-shadow:0 2px 8px #0002}
+.panel h2{font-size:17px;color:#125a8a;margin:0 0 12px;border-bottom:2px solid #dbeaf2;padding-bottom:7px}
+.cpu{border:3px solid #125a8a;border-radius:14px;padding:12px}
+.block{border:2px solid #8ab6ce;border-radius:9px;padding:10px;margin:9px 0;text-align:center;background:#f7fbfd;transition:.2s}
+.block.active{background:#ffe7a8;border-color:#d58b00;box-shadow:0 0 0 3px #ffd36a}
+.block.done{background:#e3f5e8;border-color:#4b9b61}
+.regs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.reg{border:2px solid #8ab6ce;border-radius:8px;padding:9px;text-align:center;background:#f7fbfd}
+.reg strong{display:block;color:#125a8a}
+.value{font-size:20px;font-family:Consolas,monospace;font-weight:bold;margin-top:4px}
+.bus{margin:10px 0;padding:10px;border-radius:8px;text-align:center;font-family:Consolas,monospace;font-weight:bold;border:2px dashed #8b9aa5;background:#f5f7f8}
+.memory table{width:100%;border-collapse:collapse;font-family:Consolas,monospace}
+.memory th,.memory td{border:1px solid #ccd8df;padding:6px;text-align:center}
+.memory th{background:#125a8a;color:white}
+.memory tr.current{background:#ffe7a8;font-weight:bold}
+.memory tr.data{background:#eaf7ed}
+.log{height:270px;overflow:auto;background:#111a20;color:#d7edf8;border-radius:8px;padding:10px;font-family:Consolas,monospace;font-size:13px}
+.log div{margin:3px 0}
+.instructions{background:#f7fbfd;border:1px solid #c9dce7;border-radius:8px;padding:10px;line-height:1.6}
+.legend span{display:inline-block;padding:5px 8px;margin:3px;border-radius:6px;font-size:12px}
+.fetch{background:#ffe7a8}.decode{background:#dcecff}.execute{background:#dff3e4}
+.io{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.io div{border:2px solid #8ab6ce;border-radius:8px;padding:12px;text-align:center}
+@media(max-width:950px){.grid{grid-template-columns:1fr}.regs{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>NeoCore Computer Lab</h1>
+  <p>Simulação didática da arquitetura interna de um computador — CPU de 8 bits</p>
+</header>
+<main>
+  <div class="controls">
+    <button onclick="step()">Executar próxima etapa</button>
+    <button onclick="runAll()">Executar ciclo completo</button>
+    <button class="secondary" onclick="resetSim()">Reiniciar</button>
+    <span class="status" id="status">Pronto para FETCH</span>
+    <div class="legend" style="margin-top:8px">
+      <span class="fetch">FETCH</span><span class="decode">DECODE</span><span class="execute">EXECUTE</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>CPU</h2>
+      <div class="cpu">
+        <div class="block" id="control">
+          <strong>Unidade de Controle</strong>
+          <div id="controlValue">Aguardando</div>
+        </div>
+
+        <div class="block" id="registerBlock">
+          <strong>Registradores</strong>
+          <div class="regs">
+            <div class="reg"><strong>PC</strong><div class="value" id="pc">00</div></div>
+            <div class="reg"><strong>IR</strong><div class="value" id="ir">---</div></div>
+            <div class="reg"><strong>ACC</strong><div class="value" id="acc">10</div></div>
+          </div>
+        </div>
+
+        <div class="block" id="alu">
+          <strong>ULA</strong>
+          <div id="aluValue">Aguardando operação</div>
+        </div>
+      </div>
+
+      <div class="bus" id="dataBus">Barramento de Dados: —</div>
+      <div class="bus" id="addressBus">Barramento de Endereços: —</div>
+      <div class="bus" id="controlBus">Barramento de Controle: —</div>
+    </section>
+
+    <section class="panel">
+      <h2>Memória e Cache</h2>
+      <div class="block" id="cache">
+        <strong>Cache</strong>
+        <div id="cacheValue">Sem acesso</div>
+      </div>
+
+      <div class="memory">
+        <table>
+          <thead><tr><th>Endereço</th><th>Conteúdo</th><th>Tipo</th></tr></thead>
+          <tbody id="memoryBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Entrada / Saída</h2>
+      <div class="io">
+        <div id="input"><strong>Entrada</strong><br><span id="inputValue">7</span></div>
+        <div id="output"><strong>Saída</strong><br><span id="outputValue">Aguardando</span></div>
+      </div>
+
+      <h2 style="margin-top:18px">Programa</h2>
+      <div class="instructions">
+        <b>00:</b> NOP<br>
+        <b>01:</b> NOP<br>
+        <b>02:</b> ADD 05<br>
+        <b>05:</b> DADO = 07<br><br>
+        <b>Resultado esperado:</b><br>
+        ACC: 10 + 7 = <b>17</b>
+      </div>
+
+      <h2 style="margin-top:18px">Eventos</h2>
+      <div class="log" id="log"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+let state = {
+  phase: 0,
+  pc: 2,
+  ir: "---",
+  acc: 10,
+  result: null,
+  halted: false
+};
+
+const phases = ["FETCH","DECODE","EXECUTE"];
+
+const memory = {
+  0:"NOP",
+  1:"NOP",
+  2:"ADD 05",
+  3:"NOP",
+  4:"NOP",
+  5:"07",
+  6:"00",
+  7:"00"
+};
+
+function renderMemory(){
+  const body=document.getElementById("memoryBody");
+  body.innerHTML="";
+  for(let i=0;i<8;i++){
+    const tr=document.createElement("tr");
+    if(i===state.pc && state.phase===0) tr.classList.add("current");
+    if(i===5) tr.classList.add("data");
+    const type=i===2?"INSTRUÇÃO":(i===5?"DADO":"—");
+    tr.innerHTML=`<td>${String(i).padStart(2,"0")}</td><td>${memory[i]}</td><td>${type}</td>`;
+    body.appendChild(tr);
+  }
+}
+
+function setActive(id){
+  document.querySelectorAll(".block").forEach(x=>x.classList.remove("active"));
+  if(id) document.getElementById(id).classList.add("active");
+}
+
+function log(msg){
+  const el=document.getElementById("log");
+  el.innerHTML += `<div>› ${msg}</div>`;
+  el.scrollTop=el.scrollHeight;
+}
+
+function render(){
+  document.getElementById("pc").textContent=String(state.pc).padStart(2,"0");
+  document.getElementById("ir").textContent=state.ir;
+  document.getElementById("acc").textContent=state.acc;
+  renderMemory();
+}
+
+function resetSim(){
+  state={phase:0,pc:2,ir:"---",acc:10,result:null,halted:false};
+  document.getElementById("status").textContent="Pronto para FETCH";
+  document.getElementById("controlValue").textContent="Aguardando";
+  document.getElementById("aluValue").textContent="Aguardando operação";
+  document.getElementById("dataBus").textContent="Barramento de Dados: —";
+  document.getElementById("addressBus").textContent="Barramento de Endereços: —";
+  document.getElementById("controlBus").textContent="Barramento de Controle: —";
+  document.getElementById("cacheValue").textContent="Sem acesso";
+  document.getElementById("outputValue").textContent="Aguardando";
+  setActive(null);
+  document.getElementById("log").innerHTML="";
+  log("Sistema reiniciado. PC aponta para o endereço 02.");
+  render();
+}
+
+function step(){
+  if(state.halted) return;
+
+  if(state.phase===0){
+    setActive("control");
+    document.getElementById("status").textContent="FETCH — busca da instrução";
+    document.getElementById("controlValue").textContent="READ";
+    document.getElementById("addressBus").textContent="Barramento de Endereços: 02";
+    document.getElementById("dataBus").textContent="Barramento de Dados: ADD 05";
+    document.getElementById("controlBus").textContent="Barramento de Controle: READ";
+    document.getElementById("cacheValue").textContent="MISS → buscando na memória principal";
+    state.ir="ADD 05";
+    state.pc=3;
+    log("FETCH: PC aponta para 02; memória fornece ADD 05; instrução carregada no IR.");
+    state.phase=1;
+  } else if(state.phase===1){
+    setActive("control");
+    document.getElementById("status").textContent="DECODE — decodificação";
+    document.getElementById("controlValue").textContent="OPCODE = ADD | OPERANDO = 05";
+    document.getElementById("addressBus").textContent="Barramento de Endereços: 05";
+    document.getElementById("dataBus").textContent="Barramento de Dados: —";
+    document.getElementById("controlBus").textContent="Barramento de Controle: DECODE";
+    document.getElementById("cacheValue").textContent="Endereço 05 selecionado";
+    log("DECODE: Unidade de Controle identifica ADD e o endereço do operando = 05.");
+    state.phase=2;
+  } else {
+    setActive("alu");
+    document.getElementById("status").textContent="EXECUTE — execução";
+    document.getElementById("controlValue").textContent="LOAD OPERANDO + ADD";
+    document.getElementById("addressBus").textContent="Barramento de Endereços: 05";
+    document.getElementById("dataBus").textContent="Barramento de Dados: 07";
+    document.getElementById("controlBus").textContent="Barramento de Controle: READ + ALU_ADD";
+    document.getElementById("cacheValue").textContent="Dado 07 disponibilizado à CPU";
+    document.getElementById("aluValue").textContent=`10 + 07 = 17`;
+    state.acc=17;
+    state.result=17;
+    document.getElementById("outputValue").textContent="17";
+    log("EXECUTE: ULA realiza 10 + 7. Resultado = 17. ACC recebe 17.");
+    document.getElementById("status").textContent="Ciclo concluído — ACC = 17";
+    state.halted=true;
+  }
+  render();
+}
+
+function runAll(){
+  if(state.halted) resetSim();
+  step(); setTimeout(()=>{step(); setTimeout(()=>step(),500)},500);
+}
+
+resetSim();
+</script>
+</body>
+</html>
